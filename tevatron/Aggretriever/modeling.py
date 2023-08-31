@@ -172,7 +172,7 @@ class DenseModel(nn.Module):
             # lexical matching
             q_tok_reps = aggregate(q_lexical_reps, self.model_args.agg_dim, full=not self.model_args.semi_aggregate)
             p_tok_reps = aggregate(p_lexical_reps, self.model_args.agg_dim, full=not self.model_args.semi_aggregate)
-            import pdb; pdb.set_trace()  # breakpoint 232daa2c //
+            
             lexical_scores = self.listwise_scores(q_tok_reps, p_tok_reps, effective_bsz)
 
             # semantic matching
@@ -183,7 +183,6 @@ class DenseModel(nn.Module):
             # fusion
             scores = lexical_scores + semantic_scores
             
-
             loss = 0
 
             # tct kd                 
