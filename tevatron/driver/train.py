@@ -160,11 +160,22 @@ def main():
     train_dataset = HFTrainDataset(tokenizer=tokenizer, data_args=data_args,
                                    cache_dir=data_args.data_cache_dir or model_args.cache_dir)
     
-    corpus_dataset = HFCorpusDataset(tokenizer=tokenizer, data_args=data_args,
-                                   cache_dir=data_args.data_cache_dir or model_args.cache_dir)
+    corpus_dataset = {}
+    corpus_dir = data_args.corpus_dir
+    # if data_args.corpus_path is None:
+    for lang in data_args.lang_to_corpus_path:
+        data_args.corpus_path = data_args.lang_to_corpus_path[lang]
+        hf_corpus_dataset = HFCorpusDataset(tokenizer=tokenizer, data_args=data_args,
+                                    cache_dir=data_args.data_cache_dir or model_args.cache_dir)
+        corpus_dataset[lang] = hf_corpus_dataset.process()
+    # else:
+    #     hf_corpus_dataset = HFCorpusDataset(tokenizer=tokenizer, data_args=data_args,
+    #                                 cache_dir=data_args.data_cache_dir or model_args.cache_dir)
+    #     corpus_dataset.append(hf_corpus_dataset.process())
+
     ### Todo: set augument, using TASB training dataset
     # train_dataset = TrainDataset(data_args, train_dataset.process(), tokenizer)
-    train_dataset = TrainTASBDataset(data_args, model_args.kd, train_dataset.process(), corpus_dataset.process(), tokenizer)
+    train_dataset = TrainTASBDataset(data_args, model_args.kd, train_dataset.process(), corpus_dataset, tokenizer)
 
     trainer_cls = GCTrainer if training_args.grad_cache else Trainer
     trainer = trainer_cls(

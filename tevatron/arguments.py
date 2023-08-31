@@ -118,6 +118,9 @@ class DataArguments:
     corpus_dir: str = field(
         default=None, metadata={"help": "Path to corpus directory"}
     )
+    lang: str = field(
+        default="english", metadata={"help": "Path to corpus directory"}
+    )
     query_cluster_dir: str = field(
         default=None, metadata={"help": "Path to query cluster direcotry"}
     )
@@ -133,6 +136,8 @@ class DataArguments:
         default=False, metadata={"help": "always use the first positive passage"})
     negative_passage_no_shuffle: bool = field(
         default=False, metadata={"help": "always use the first negative passages"})
+
+    uncased: bool = field(default=False)
 
     tasb_sampling: bool = field(
         default=False, metadata={"help": "use topic-aware balanced sampling"})
@@ -182,13 +187,28 @@ class DataArguments:
             ]
         else:
             self.train_path = None
+
         if self.corpus_dir is not None:
-            files = sorted(os.listdir(self.corpus_dir))
-            self.corpus_path = [
-                os.path.join(self.corpus_dir, f)
-                for f in files
-                if f.endswith('jsonl') or f.endswith('json')
-            ]
+            if self.lang is None:
+                files = sorted(os.listdir(self.corpus_dir))
+                self.corpus_path = [
+                    os.path.join(self.corpus_dir, f)
+                    for f in files
+                    if f.endswith('jsonl') or f.endswith('json')
+                ]
+                self.lang_to_corpus_path = None
+            else:
+                self.corpus_path = None
+                lang = self.lang.split(',')
+                self.lang_to_corpus_path ={}
+                for l in lang:
+                    corpus_dir = os.path.join(self.corpus_dir, l)
+                    files = sorted(os.listdir(corpus_dir))    
+                    self.lang_to_corpus_path[l] = [
+                        os.path.join(corpus_dir, f)
+                        for f in files
+                        if f.endswith('jsonl') or f.endswith('json')
+                    ]  
         else:
             self.corpus_path = None
 

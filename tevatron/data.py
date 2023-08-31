@@ -99,6 +99,7 @@ class TrainTASBDataset(Dataset):
     ):
         self.train_data, self.qidx_cluster = dataset
         self.corpus = corpus
+        self.lang_list = [lang for lang in self.corpus ]
         self.tok = tokenizer
         self.trainer = trainer
         self.data_args = data_args
@@ -131,9 +132,12 @@ class TrainTASBDataset(Dataset):
         )
         return item
 
-    def output_qp(self, group, _hashed_seed):
+    def output_qp(self, group, choosen_lang, _hashed_seed, uncased):
         epoch = int(self.trainer.state.epoch)
-        qry = group['query']
+
+        qry = group['query'][choosen_lang]
+        if uncased:
+            qry = qry.lower()
         encoded_query = self.create_one_example(qry, is_query=True)
 
         encoded_passages = []
@@ -144,7 +148,10 @@ class TrainTASBDataset(Dataset):
             pos_psg_id = group_positives[0]
         else:
             pos_psg_id = group_positives[(_hashed_seed + epoch) % len(group_positives)]
-            pos_psg = self.corpus[int(pos_psg_id)]['text']
+        
+        pos_psg = self.corpus[choosen_lang][int(pos_psg_id)]['text']
+        if uncased:
+            pos_psg = pos_psg.lower()
         encoded_passages.append(self.create_one_example(pos_psg))
         
         negative_size = self.data_args.train_n_passages - 1
@@ -162,17 +169,20 @@ class TrainTASBDataset(Dataset):
             negs = negs[_offset: _offset + negative_size]
 
         for neg_psg_pid in negs:
-            neg_psg = self.corpus[int(neg_psg_pid)]['text']
+            neg_psg = self.corpus[choosen_lang][int(neg_psg_pid)]['text']
+            if uncased:
+                neg_psg = neg_psg.lower()
             encoded_passages.append(self.create_one_example(neg_psg))
-        
-        return encoded_query, encoded_passages, None
+
+        return encoded_query, encoded_passages, [0]
     
-    def output_qp_with_score(self, group, _hashed_seed):
-        qry = group['query']
+    def output_qp_with_score(self, group, choosen_lang, _hashed_seed, uncased):
+        qry = group['query'][choosen_lang]
+        if uncased:
+            qry = qry.lower()
         encoded_query = self.create_one_example(qry, is_query=True)
 
         encoded_passages = []
-        scores = []
         qids_bin_pairs = group['bin_pairs']
         bins_pairs = random.choices(qids_bin_pairs, k=1)[0]
         
@@ -183,17 +193,22 @@ class TrainTASBDataset(Dataset):
             bin_pairs = random.choices(bins_pairs, k=1)[0]
             pairs.append(random.choices(bin_pairs, k=1)[0])
 
-        pos_psg_idx = int(pairs[0][0])
+        pos_psg_idx = random.randint(0 ,len(group['positive_pids']) - 1)
         pos_psg_id = group['positive_pids'][pos_psg_idx]
-        pos_psg = self.corpus[int(pos_psg_id)]['text']
+        pos_psg_score = group['positive_scores'][pos_psg_idx]
+        pos_psg = self.corpus[choosen_lang][int(pos_psg_id)]['text']
+        if uncased:
+            pos_psg = pos_psg.lower()
         encoded_passages.append(self.create_one_example(pos_psg))
         
+        scores = []
         for pair in pairs:
-            neg_psg_idx = int(pair[1])
-            neg_psg_id = group['negative_pids'][neg_psg_idx]
-            neg_psg = self.corpus[int(neg_psg_id)]['text']
+            neg_psg_id = int(pair[0])
+            neg_psg = self.corpus[choosen_lang][int(neg_psg_id)]['text']
+            if uncased:
+                neg_psg = neg_psg.lower()
             encoded_passages.append(self.create_one_example(neg_psg))
-            scores.append(-pair[2])
+            scores.append(pair[1] - pos_psg_score)
 
         return encoded_query, encoded_passages, scores
 
@@ -202,24 +217,25 @@ class TrainTASBDataset(Dataset):
 
     def __getitem__(self, item) -> Tuple[BatchEncoding, List[BatchEncoding]]:
         _hashed_seed = hash(item + self.trainer.args.seed)
+        # make sure the sample same languages in the same batch
+        random.seed(self.trainer.state.global_step)
+        choosen_lang = random.choices(self.lang_list, k=1)[0] #just supporting one langauge in each batch
+
         if self.tasb_sampling:
             # make sure the same query cluster gathered in the same batch
-            random.seed(self.trainer.state.global_step)
             cluster_list = random.choices(self.qidx_cluster, k=24)
-            
             #sampling different queries in a batch
             random.seed(_hashed_seed) 
             cluster = random.choices(cluster_list, k=1)[0]
             item = random.choices(cluster['qidx'])[0]
-
             group = self.train_data[item]
         else:
             group = self.train_data[item]
         
         if self.kd:            
-            return self.output_qp_with_score(group, _hashed_seed)
+            return self.output_qp_with_score(group, choosen_lang, _hashed_seed, self.data_args.uncased)
         else:
-            return self.output_qp(group, _hashed_seed)
+            return self.output_qp(group, choosen_lang, _hashed_seed, self.data_args.uncased)
         
 
 

@@ -172,7 +172,7 @@ class DenseModel(nn.Module):
             # lexical matching
             q_tok_reps = aggregate(q_lexical_reps, self.model_args.agg_dim, full=not self.model_args.semi_aggregate)
             p_tok_reps = aggregate(p_lexical_reps, self.model_args.agg_dim, full=not self.model_args.semi_aggregate)
-
+            import pdb; pdb.set_trace()  # breakpoint 232daa2c //
             lexical_scores = self.listwise_scores(q_tok_reps, p_tok_reps, effective_bsz)
 
             # semantic matching
@@ -279,9 +279,12 @@ class DenseModel(nn.Module):
         else:
             ## w/o MLM
             ## p_term_weights = torch.relu(p_term_weights)
-            p_lexical_reps = torch.zeros(p_seq_hidden.shape[0], p_seq_hidden.shape[1], 30522, dtype=p_seq_hidden.dtype, device=p_seq_hidden.device) # (batch, seq, vocab)
-            p_lexical_reps = torch.scatter(p_lexical_reps, dim=-1, index=psg.input_ids[:,1:,None], src=p_term_weights)
-            p_lexical_reps = p_lexical_reps.max(-2).values
+            p_lexical_reps = torch.zeros(p_seq_hidden.shape[0], self.lm_p.embeddings.word_embeddings.weight.shape[0], dtype=p_term_weights.dtype, \
+                                         device=p_term_weights.device).scatter_reduce(1, psg.input_ids[:,1:], p_term_weights.squeeze(), reduce='amax')
+            
+            # p_lexical_reps = torch.zeros(p_seq_hidden.shape[0], p_seq_hidden.shape[1], 30522, dtype=p_seq_hidden.dtype, device=p_seq_hidden.device) # (batch, seq, vocab)
+            # p_lexical_reps = torch.scatter(p_lexical_reps, dim=-1, index=psg.input_ids[:,1:,None], src=p_term_weights)
+            # p_lexical_reps = p_lexical_reps.max(-2).values
 
 
         
@@ -311,11 +314,14 @@ class DenseModel(nn.Module):
         else:
             # w/o MLM
             # q_term_weights = torch.relu(q_term_weights)
-            q_lexical_reps = torch.zeros(q_seq_hidden.shape[0], q_seq_hidden.shape[1], 30522, dtype=q_seq_hidden.dtype, device=q_seq_hidden.device) # (batch, len, vocab)
-            q_lexical_reps = torch.scatter(q_lexical_reps, dim=-1, index=qry.input_ids[:,1:,None], src=q_term_weights)
-            q_lexical_reps = q_lexical_reps.max(-2).values
+            q_lexical_reps = torch.zeros(q_seq_hidden.shape[0], self.lm_q.embeddings.word_embeddings.weight.shape[0], dtype=q_term_weights.dtype, \
+                                         device=q_term_weights.device).scatter_reduce(1, qry.input_ids[:,1:], q_term_weights.squeeze(), reduce='amax')
 
+            # q_lexical_reps = torch.zeros(q_seq_hidden.shape[0], q_seq_hidden.shape[1], 30522, dtype=q_seq_hidden.dtype, device=q_seq_hidden.device) # (batch, len, vocab)
+            # q_lexical_reps = torch.scatter(q_lexical_reps, dim=-1, index=qry.input_ids[:,1:,None], src=q_term_weights)
+            # q_lexical_reps = q_lexical_reps.max(-2).values
 
+        
         
         if self.pooler is not None:
             q_semantic_reps = self.pooler(q=q_cls_hidden)
@@ -323,6 +329,16 @@ class DenseModel(nn.Module):
             q_semantic_reps = None
 
         return q_lexical_reps, q_semantic_reps
+
+    @staticmethod
+    def project_to_original_vacab(lexical_reps, input_type):
+        if input_type == 'qry':
+            index = torch.tensor(self.lm_q.get_current_vocab_mask(), device=lexical_reps.device).repeat(lexical_reps.shape[0], 1)
+            full_hidden_states = torch.zeros(lexical_reps.shape[0], self.lm_q.get_vocab_size(), dtype=torch.float32, device=lexical_reps.device) # (batch, len, vocab)
+        else:
+            index = torch.tensor(self.lm_p.get_current_vocab_mask(), device=lexical_reps.device).repeat(lexical_reps.shape[0], 1)
+            full_hidden_states = torch.zeros(lexical_reps.shape[0], self.lm_p.get_vocab_size(), dtype=torch.float32, device=lexical_reps.device) # (batch, len, vocab)
+        return torch.scatter(full_hidden_states, dim=-1, index=index, src=lexical_reps) # fill value
 
     @staticmethod
     def merge_reps(lexical_reps, semantic_reps):
