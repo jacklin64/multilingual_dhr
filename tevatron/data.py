@@ -243,7 +243,8 @@ class TrainTASBDataset(Dataset):
 class EncodeDataset(Dataset):
     input_keys = ['text_id', 'text']
 
-    def __init__(self, dataset: datasets.Dataset, tokenizer: PreTrainedTokenizer, max_len=128):
+    def __init__(self, data_args: DataArguments, dataset: datasets.Dataset, tokenizer: PreTrainedTokenizer, max_len=128):
+        self.data_args = data_args
         self.encode_data = dataset
         self.tok = tokenizer
         self.max_len = max_len
@@ -253,6 +254,10 @@ class EncodeDataset(Dataset):
 
     def __getitem__(self, item) -> Tuple[str, BatchEncoding]:
         text_id, text = (self.encode_data[item][f] for f in self.input_keys)
+
+        if self.data_args.uncased:
+            text = text.lower()
+
         if len(text)==0:
             text = [0]
         encoded_text = self.tok.encode_plus(
@@ -280,6 +285,9 @@ class EvalDataset(Dataset):
 
     def __getitem__(self, item) -> Tuple[str, BatchEncoding]:
         qry_text_id, qry_text, psg_text_id, psg_text, rel = (self.encode_data[item][f] for f in self.input_keys)
+        if self.data_args.uncased:
+            qry_text = qry_text.lower()
+            psg_text = psg_text.lower()
         encoded_qry_text = self.tok.encode_plus(
             qry_text,
             max_length=self.data_args.q_max_len,

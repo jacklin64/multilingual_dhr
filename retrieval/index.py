@@ -4,7 +4,6 @@ import glob
 # os.environ['OMP_NUM_THREADS'] = str(32)
 import numpy as np
 import math
-from progressbar import *
 # from util import load_tfrecords_and_index, read_id_dict, faiss_index
 from multiprocessing import Pool, Manager
 import pickle
