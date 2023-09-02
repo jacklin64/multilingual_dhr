@@ -217,6 +217,7 @@ class DenseModel(nn.Module):
                 else:
                     loss += self.kl_loss(nn.functional.log_softmax(scores, dim=-1), hard_label_scores)
 
+
             if self.train_args.negatives_x_device:
                 loss = loss * self.world_size  # counter average weight reduction
             return DenseOutput(

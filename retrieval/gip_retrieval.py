@@ -9,7 +9,7 @@ import pickle as pickle
 import torch
 import torch.nn as nn
 import time
-import faiss
+
 
 def faiss_search(query_embs, corpus_embs, batch=1, topk=1000):
     print('start faiss index')
@@ -322,6 +322,7 @@ def main():
         if not args.PQIP:
             results, scores = GIP_retrieval(qids, query_embs, query_arg_idxs, corpus_embs, corpus_arg_idxs ,args)
         else:
+            import faiss
             results, scores = PQ_IP_retrieval(qids, query_embs, query_arg_idxs, corpus_embs, corpus_arg_idxs ,args)
     else:
         results, scores = IP_retrieval(qids, query_embs, corpus_embs, args)
