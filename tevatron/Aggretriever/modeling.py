@@ -22,7 +22,6 @@ from .utils import aggregate
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class DenseOutput(ModelOutput):
     q_reps: Tensor = None
@@ -139,14 +138,14 @@ class DenseModel(nn.Module):
             if query is not None:
                 q_lexical_reps = aggregate(q_lexical_reps, self.model_args.agg_dim, full=not self.model_args.semi_aggregate)
                 if q_semantic_reps is not None:
-                    q_reps = self.merge_reps(q_lexical_reps, q_semantic_reps)
+                    q_reps = self.merge_reps(q_semantic_reps, q_lexical_reps)
                 else:
                     q_reps = q_lexical_reps
                 
             if passage is not None:
                 p_lexical_reps = aggregate(p_lexical_reps, self.model_args.agg_dim, full=not self.model_args.semi_aggregate)
                 if p_semantic_reps is not None:
-                    p_reps = self.merge_reps(p_lexical_reps, p_semantic_reps)
+                    p_reps = self.merge_reps(p_semantic_reps, p_lexical_reps)
                 else:
                     p_reps = p_lexical_reps
                 
@@ -284,16 +283,9 @@ class DenseModel(nn.Module):
             p_lexical_reps = torch.max((p_logits * p_term_weights) * attention_mask, dim=-2).values
         else:
             ## w/o MLM
-            ## p_term_weights = torch.relu(p_term_weights)
             p_lexical_reps = torch.zeros(p_seq_hidden.shape[0], self.lm_p.embeddings.word_embeddings.weight.shape[0], dtype=p_term_weights.dtype, \
                                          device=p_term_weights.device).scatter_reduce(1, psg.input_ids[:,1:], p_term_weights.squeeze(), reduce='amax')
             
-            # p_lexical_reps = torch.zeros(p_seq_hidden.shape[0], p_seq_hidden.shape[1], 30522, dtype=p_seq_hidden.dtype, device=p_seq_hidden.device) # (batch, seq, vocab)
-            # p_lexical_reps = torch.scatter(p_lexical_reps, dim=-1, index=psg.input_ids[:,1:,None], src=p_term_weights)
-            # p_lexical_reps = p_lexical_reps.max(-2).values
-
-
-        
         if self.pooler is not None:
             p_semantic_reps = self.pooler(p=p_cls_hidden)  # D * d
         else:
@@ -319,15 +311,8 @@ class DenseModel(nn.Module):
             q_lexical_reps = torch.max((q_logits * q_term_weights) * attention_mask, dim=-2).values
         else:
             # w/o MLM
-            # q_term_weights = torch.relu(q_term_weights)
             q_lexical_reps = torch.zeros(q_seq_hidden.shape[0], self.lm_q.embeddings.word_embeddings.weight.shape[0], dtype=q_term_weights.dtype, \
                                          device=q_term_weights.device).scatter_reduce(1, qry.input_ids[:,1:], q_term_weights.squeeze(), reduce='amax')
-
-            # q_lexical_reps = torch.zeros(q_seq_hidden.shape[0], q_seq_hidden.shape[1], 30522, dtype=q_seq_hidden.dtype, device=q_seq_hidden.device) # (batch, len, vocab)
-            # q_lexical_reps = torch.scatter(q_lexical_reps, dim=-1, index=qry.input_ids[:,1:,None], src=q_term_weights)
-            # q_lexical_reps = q_lexical_reps.max(-2).values
-
-        
         
         if self.pooler is not None:
             q_semantic_reps = self.pooler(q=q_cls_hidden)
@@ -347,11 +332,11 @@ class DenseModel(nn.Module):
         return torch.scatter(full_hidden_states, dim=-1, index=index, src=lexical_reps) # fill value
 
     @staticmethod
-    def merge_reps(lexical_reps, semantic_reps):
-        dim = lexical_reps.shape[1] + semantic_reps.shape[1]
-        merged_reps = torch.zeros(lexical_reps.shape[0], dim, dtype=lexical_reps.dtype, device=lexical_reps.device)
-        merged_reps[:, :lexical_reps.shape[1]] = lexical_reps
-        merged_reps[:, lexical_reps.shape[1]:] = semantic_reps
+    def merge_reps(semantic_reps, lexical_reps):
+        dim = semantic_reps.shape[1] + lexical_reps.shape[1]
+        merged_reps = torch.zeros(semantic_reps.shape[0], dim, dtype=semantic_reps.dtype, device=semantic_reps.device)
+        merged_reps[:, :semantic.shape[1]] = semantic_reps
+        merged_reps[:, semantic_reps.shape[1]:] = lexical_reps
         return merged_reps
 
     @staticmethod
@@ -435,6 +420,7 @@ class DenseModel(nn.Module):
 
         term_weight_trans = cls.build_term_weight_transform(model_args)
 
+        
 
         model = cls(
             lm_q=lm_q,
@@ -584,8 +570,6 @@ class DenseModelForInference(DenseModel):
             term_weight_trans.load(model_name_or_path)
         else:
             term_weight_trans = None
-        
-
 
         model = cls(
             lm_q=lm_q,
